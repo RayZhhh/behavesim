@@ -1,0 +1,34 @@
+# Code implementation for "Rethinking Code Similarity for Automated Algorithm Design with LLMs"
+
+## Installation
+
+First, clone the repository:
+```bash
+git clone https://github.com/RayZhhh/behavesim.git
+cd behavesim
+```
+
+> **Important:** This project requires Python >=3.10 (3.11 is recommended).
+
+There are two ways to set up the environment:
+
+### 1. Using `uv` (Recommended)
+
+This workflow creates a virtual environment and installs all dependencies from the `pyproject.toml` and `uv.lock` files.
+
+```bash
+# Create and activate the virtual environment
+uv venv
+source .venv/bin/activate
+
+# Sync the environment to match the lock file
+uv pip sync
+```
+
+### 2. Using `pip`
+
+This method assumes you have a Python environment ready. You may need to generate a `requirements.txt` first or install packages directly.
+
+```bash
+pip install numpy scipy swanlab black adtools editdistance
+```
