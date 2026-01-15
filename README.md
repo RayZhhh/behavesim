@@ -30,5 +30,5 @@ uv pip sync
 This method assumes you have a Python environment ready. You may need to generate a `requirements.txt` first or install packages directly.
 
 ```bash
-pip install numpy scipy swanlab black adtools editdistance
+pip install py-adtools numpy scipy swanlab black editdistance
 ```
