@@ -7,15 +7,13 @@ from typing import Optional
 
 
 class PickleLogger:
-    """
-    A thread-safe logger that caches data and writes to a pickle file periodically.
-    """
+    """A thread-safe logger that caches data and writes to a pickle file periodically."""
 
     def __init__(
-            self,
-            logdir: PathLike | str,
-            file_name: str = "search_log.pkl",
-            write_file_frequency: Optional[int] = 100,
+        self,
+        logdir: PathLike | str,
+        file_name: str = "search_log.pkl",
+        write_file_frequency: Optional[int] = 100,
     ):
         """Initializes the logger.
 
@@ -53,8 +51,8 @@ class PickleLogger:
             log_dict["count"] = self._counter
             self._cache.append(log_dict)
             if (
-                    self._write_file_frequency
-                    and self._counter % self._write_file_frequency == 0
+                self._write_file_frequency
+                and self._counter % self._write_file_frequency == 0
             ):
                 self._write_cache_to_file_nolock()
             self._counter += 1
@@ -104,16 +102,16 @@ class PickleLoggerWithSwanLab(PickleLogger):
     """A Pickle logger that also logs metrics to SwanLab."""
 
     def __init__(
-            self,
-            logdir: PathLike | str,
-            project: str,
-            file_name: str = "search_log.pkl",
-            experiment_name: Optional[str] = None,
-            group: Optional[str] = None,
-            config: Optional[dict] = None,
-            swanlab_logdir: Optional[PathLike | str] = None,
-            api_key: Optional[str] = None,
-            write_file_frequency: Optional[int] = 100,
+        self,
+        logdir: PathLike | str,
+        project: str,
+        file_name: str = "search_log.pkl",
+        experiment_name: Optional[str] = None,
+        group: Optional[str] = None,
+        config: Optional[dict] = None,
+        swanlab_logdir: Optional[PathLike | str] = None,
+        api_key: Optional[str] = None,
+        write_file_frequency: Optional[int] = 100,
     ):
         """Initializes the logger and a SwanLab run.
 

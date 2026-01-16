@@ -26,3 +26,7 @@ Thumbs.db
 
 # Logs
 logs/
+swanlog/
+
+# Test files
+run_search_my_test.py

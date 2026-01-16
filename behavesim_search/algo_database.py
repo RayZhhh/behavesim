@@ -4,8 +4,9 @@ import logging
 import random
 import threading
 import time
-from typing import Optional, List, Any, Dict, Literal
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from typing import Any, Dict, List, Literal, Optional
 
 import numpy as np
 
@@ -547,15 +548,12 @@ class AlgoIsland:
                 self.algorithms = self.algorithms[: self.island_capacity]
 
     def selection(self, k: int = 1) -> List[AlgoProto]:
-        """Selects k algorithms from the island using rank-based selection.
+        """Selects k algorithms from the island using a two-stage process.
 
-        Algorithms are selected based on their scores, with higher-scoring
-        algorithms having a greater probability of being chosen. The
-        `exploitation_intensity` parameter from the AlgoDatabaseConfig controls
-        the steepness of this probability distribution.
-
-        For each selected algorithm, its `num_selected` attribute is
-        incremented to track its participation in the selection process.
+        First, a rank-based selection is performed on the unique scores available
+        in the island to choose `k` score tiers. Second, for each chosen score,
+        a second rank-based selection is performed on the algorithms in that
+        tier, where shorter programs are given a higher probability.
 
         This method is thread-safe.
 
@@ -570,30 +568,50 @@ class AlgoIsland:
             if not self.algorithms:
                 return []
 
-            # Ensure k does not exceed the number of unique scores to guarantee score diversity
-            unique_scores = set(algo.score for algo in self.algorithms)
-            if k > len(unique_scores):
-                k = len(unique_scores)
+            # 1. Group algorithms by score
+            algos_by_score = defaultdict(list)
+            for algo in self.algorithms:
+                algos_by_score[algo.score].append(algo)
 
+            # 2. Prepare for rank-based selection on the scores
+            unique_scores = sorted(list(algos_by_score.keys()), reverse=True)
+            if not unique_scores:
+                return []
+
+            # Ensure k is not greater than the number of unique scores
+            num_to_select = min(k, len(unique_scores))
+
+            # 3. Perform rank-based selection to pick k score tiers
+            selected_scores = _rank_based_selection(
+                scores=unique_scores,
+                choices=unique_scores,
+                k=num_to_select,
+                exploitation_intensity=self.exploitation_intensity,
+            )
+
+            # 4. For each selected score, perform a second rank-based selection
+            #    based on code length.
             selected_algos = []
-            candidates = list(self.algorithms)
+            for score in selected_scores:
+                candidate_algos = algos_by_score[score]
+                if not candidate_algos:
+                    continue
 
-            for _ in range(k):
-                if not candidates:
-                    break
-
-                scores = [algo.score for algo in candidates]
-                # Select 1 algorithm from the current candidates
-                picked = _rank_based_selection(
-                    scores=scores,
-                    choices=candidates,
-                    k=1,
-                    exploitation_intensity=self.exploitation_intensity,
-                )[0]
-                selected_algos.append(picked)
-
-                # Remove candidates with the same score to ensure next selection has a different score
-                candidates = [algo for algo in candidates if algo.score != picked.score]
+                if len(candidate_algos) == 1:
+                    selected_algos.append(candidate_algos[0])
+                else:
+                    # Higher score for shorter programs (-line_count)
+                    line_count_scores = [
+                        -len(str(algo.program).split("\n")) for algo in candidate_algos
+                    ]
+                    # Perform rank-based selection on length
+                    picked_algo = _rank_based_selection(
+                        scores=line_count_scores,
+                        choices=candidate_algos,
+                        k=1,
+                        exploitation_intensity=0.5,
+                    )[0]
+                    selected_algos.append(picked_algo)
 
             return selected_algos
 

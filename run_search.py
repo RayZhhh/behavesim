@@ -30,12 +30,27 @@ async def main():
         traj_sample_k=2,
         traj_trunc_n=20,
     )
+
+    # Todo: Uncomment following code if SwanLab is not applicable for you !!!
+    # Use normal pickle logger
+    # logger = PickleLogger(logdir=f"logs/behavesim-search-run1")
+
+    # Use SwanLab logger
+    logger = PickleLoggerWithSwanLab(
+        logdir=f"logs/behavesim-search-run1",
+        project="behavesim-tsp",
+        experiment_name=f"behavesim-search-run1",
+        group=f"behavesim-search",
+        api_key="xxx",  # <--- Todo: Replace it with your api_key !!!
+    )
+
     db_config = AlgoDatabaseConfig(
         algo_sim_calculator=sim_calculator,
         n_islands=10,
         num_sim_caculator_workers=2,
         async_register=True,
     )
+
     search_config = BehaveSimSearchConfig(
         task_description=task_description,
         database_config=db_config,
@@ -51,20 +66,7 @@ async def main():
         llm_max_tokens=None,
         llm_timeout_seconds=60 * 3,
         enable_database_reclustering=True,
-        recluster_threshold=10,
-    )
-
-    # Todo: Uncomment following code if SwanLab is not applicable for you !!!
-    # Use normal pickle logger
-    # logger = PickleLogger(logdir=f"logs/behavesim-search-run1")
-
-    # Use SwanLab logger
-    logger = PickleLoggerWithSwanLab(
-        logdir=f"logs/behavesim-search-run1",
-        project="behavesim-tsp",
-        experiment_name=f"behavesim-search-run1",
-        group=f"behavesim-search",
-        api_key="xxx",  # <--- Todo: Do not use my api key !!!
+        recluster_threshold=100,
     )
 
     search = BehaveSimSearchAsync(

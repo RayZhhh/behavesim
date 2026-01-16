@@ -1,15 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, List, Any, TypedDict
 
-from adtools.evaluator import PyEvaluator, PyEvaluatorRay
-
+import adtools.evaluator
 
 class EvalResult(TypedDict):
     score: float
     behavior: Any
 
 
-class BehaveSimSearchEvaluator(PyEvaluator, ABC):
+class BehaveSimSearchEvaluator(adtools.evaluator.PyEvaluator, ABC):
     def __init__(
         self,
         exec_code: bool = True,
