@@ -32,3 +32,14 @@ This method assumes you have a Python environment ready. You may need to generat
 ```bash
 pip install py-adtools numpy scipy swanlab black editdistance
 ```
+
+### 3. Run `FunSearch+BehaveSim`
+
+Please first check `Todo` items in `run_search.py`. Run the script using any of the following commands: 
+
+```bash
+uv run run_search.py
+python run_search.py
+nohup uv run run_search.py > log.out 2>&1 &
+nohup python run_search.py > log.out 2>&1 &
+```
