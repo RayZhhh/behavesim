@@ -73,6 +73,7 @@ class BehaveSimSearchAsync:
         """
         self._config = config
         self._template_program_str = str(self._config.template_program)
+        # Parse the template program
         self._template_program = PyProgram.from_text(self._template_program_str)
         if not self._template_program:
             raise ValueError("The provided template program is not valid Python code.")

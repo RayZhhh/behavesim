@@ -31,7 +31,7 @@ async def main():
         traj_trunc_n=20,
     )
 
-    # Todo: Uncomment following code if SwanLab is not applicable for you !!!
+    # Todo: Uncomment following code if 'SwanLab' is not applicable for you !!!
     # Use normal pickle logger
     # logger = PickleLogger(logdir=f"logs/behavesim-search-run1")
 
