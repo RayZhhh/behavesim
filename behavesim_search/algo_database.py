@@ -315,7 +315,7 @@ class AlgoDatabase:
 
         # Save similarity results in the "sim_cache"
         sim_cache_all_island = [res[1] for res in island_results]
-        sim_caches_all_island = functools.reduce(dict.__or__, sim_cache_all_island, {})
+        sim_caches_all_island = functools.reduce(dict.__or__, sim_cache_all_island, {})  # noqa
         algo["sim_cache"] = sim_caches_all_island
 
         # Aggregate timings across all islands
