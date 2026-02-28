@@ -1,4 +1,18 @@
-# Code implementation for "Rethinking Code Similarity for Automated Algorithm Design with LLMs"
+![behavesim](./assets/behavesim.png)
+
+# Code for ICLR 26 paper: "Rethinking Code Similarity for Automated Algorithm Design with LLMs"
+
+## Citation
+
+```bibtex
+@inproceedings{zhang2026rethinking,
+  title={Rethinking Code Similarity for Automated Algorithm Design with LLMs},
+  author={Zhang, Rui and Lu, Zhichao},
+  booktitle={The Fourteenth International Conference on Learning Representations},
+  url={https://openreview.net/pdf?id=HIUqeO9OOr},
+  year={2026}
+}
+```
 
 ## Installation
 
@@ -43,3 +57,4 @@ python run_search.py
 nohup uv run run_search.py > log.out 2>&1 &
 nohup python run_search.py > log.out 2>&1 &
 ```
+
