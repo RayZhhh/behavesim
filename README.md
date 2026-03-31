@@ -17,8 +17,9 @@ BehaveSim: Rethinking Code Similarity for<br/>Automated Algorithm Design with LL
   <a href="https://github.com/RayZhhh/behavesim"><img src="https://img.shields.io/github/stars/RayZhhh/behavesim" alt="Stars"></a>
   <a href="https://github.com/RayZhhh/behavesim"><img src="https://img.shields.io/github/forks/RayZhhh/behavesim" alt="Forks"></a>
   <a href="https://github.com/RayZhhh/behavesim/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RayZhhh/behavesim" alt="License"></a>
-  <a href="https://github.com/RayZhhh/algodisco/blob/main/docs_en/user-guide/search-methods/index.md"><img src="https://img.shields.io/badge/Framework_Guide-AlgoDisco-0A7F5A" alt="Framework Guide"></a>
   <a href="https://github.com/RayZhhh/behavesim#tutorial"><img src="https://img.shields.io/badge/Usage_Tutorial-BehaveSim-1F6FEB" alt="Usage Tutorial"></a>
+  <a href="https://github.com/RayZhhh/algodisco/blob/main/docs_en/user-guide/search-methods/index.md"><img src="https://img.shields.io/badge/Framework_Guide-AlgoDisco-0A7F5A" alt="Framework Guide"></a>
+  <a href="https://deepwiki.com/RayZhhh/algodisco/"><img src="https://img.shields.io/badge/DeepWiki-AlgoDisco-2563EB" alt="DeepWiki"></a>
 </p>
 
 ## 📝 Citation
