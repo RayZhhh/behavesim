@@ -1,11 +1,13 @@
 from typing import Any, Optional, Callable, Dict, List
 import numpy as np
 
-from behavesim_search.evaluator import BehaveSimSearchEvaluator, EvalResult
+
+from algodisco.methods.funsearch_behavesim.evaluator import FunSearchBehaveSimEvaluator
+from algodisco.toolkit.sandbox import sandbox_run
 from tasks.traveling_salesman.get_instance import TSPInstanceGenerator
 
 
-class Evaluator(BehaveSimSearchEvaluator):
+class Evaluator(FunSearchBehaveSimEvaluator):
     """Evaluator for Traveling Salesman Problem (TSP)."""
 
     def __init__(self, n_instance=16, problem_size=50):
@@ -23,22 +25,23 @@ class Evaluator(BehaveSimSearchEvaluator):
         generator = TSPInstanceGenerator(self.n_instance, self.problem_size)
         self._datasets = generator.generate_instances()
 
-    def evaluate_program(
-        self,
-        program_str: str,
-        callable_functions_dict: Dict[str, Callable] | None,
-        callable_functions_list: List[Callable] | None,
-        callable_classes_dict: Dict[str, Callable] | None,
-        callable_classes_list: List[Callable] | None,
-        **kwargs,
-    ) -> EvalResult:
-        algo_callable = callable_functions_dict["select_next_node"]
-        evaluation_result = self.evaluate_(algo_callable)
+    @sandbox_run(timeout=60)
+    def evaluate_program(self, program_str: str):
+        g = {}
+        exec(program_str, g)
+
+        if not g or "select_next_node" not in g:
+            return dict(score=-np.inf, behavior=[])
+
+        algo_callable = g["select_next_node"]
+
+        evaluation_result = self._evaluate(algo_callable)
         if evaluation_result is None:
             # Handle the case where evaluation fails
-            return EvalResult(score=-np.inf, behavior=[])
+            return dict(score=-np.inf, behavior=[])
+
         score, behavior = evaluation_result
-        return EvalResult(score=score, behavior=behavior)
+        return dict(score=score, behavior=behavior)
 
     def tour_cost(self, instance: np.ndarray, solution: np.ndarray) -> float:
         """Calculate the total cost (Euclidean distance) of the tour.
@@ -80,7 +83,7 @@ class Evaluator(BehaveSimSearchEvaluator):
         neighborhood_matrix = np.argsort(dist, axis=1)
         return neighborhood_matrix
 
-    def evaluate_(self, algo_callable: Callable) -> Optional[tuple[float, list]]:
+    def _evaluate(self, algo_callable: Callable) -> Optional[tuple[float, list]]:
         """Evaluate the heuristic function 'eva' on the datasets.
         Args:
             algo_callable (callable): The heuristic function to decide the next node.
@@ -210,5 +213,5 @@ def select_next_node(
     return next_node
 '''
     tsp = Evaluator()
-    res = tsp.secure_evaluate(code)
-    print(res["result"]["behavior"][0][:5])
+    res = tsp.evaluate_program(code)
+    print(res.get("score"))

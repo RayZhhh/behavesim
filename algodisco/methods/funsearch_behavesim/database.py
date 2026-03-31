@@ -1,4 +1,6 @@
-import dataclasses
+# Copyright (c) 2026 Rui Zhang
+# Licensed under the MIT license.
+
 import functools
 import logging
 import random
@@ -6,65 +8,30 @@ import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import numpy as np
+import scipy
 
-from behavesim_search.algo_proto import AlgoProto
-from behavesim_search.similarity_calculator import BehaveSimCalculator
+from algodisco.base.algo import AlgoProto
+from algodisco.methods.funsearch_behavesim.similarity_calculator import (
+    BehaveSimCalculator,
+)
 
 
-def _rank_based_selection(
-    scores: List[float], choices: List[Any], k: int, exploitation_intensity: float = 1.0
-) -> List[Any]:
-    r"""Selects k items based on rank, with higher scores being more likely.
+def _softmax(logits: np.ndarray, temperature: float) -> np.ndarray:
+    """Returns the tempered softmax of 1D finite 'logits'."""
+    if not np.all(np.isfinite(logits)):
+        non_finite = set(logits[~np.isfinite(logits)])
+        raise ValueError(f'"logits" contains non-finite value(s): {non_finite}')
+    if not np.issubdtype(logits.dtype, np.floating):
+        logits = np.array(logits, dtype=np.float32)
 
-    The selection probability for each item $i$ is given by
-    $p_i = \frac{r_i^{-\alpha}}{\sum_{j=1}^n r_j^{-\alpha}}$,
-    where $r_i$ is the rank of item $i$ (1 for the highest score) and $\alpha$
-    (exploitation_intensity) controls the selection pressure.
-
-    Args:
-        scores: A list of scores corresponding to the choices.
-        choices: A list of items to choose from.
-        k: The number of items to select.
-        exploitation_intensity: A non-negative float controlling the selection
-            pressure.
-            - If 0, sampling is uniform (all items have equal probability).
-            - As it approaches infinity, it implements hill-climbing
-              (only the top-ranked item is selected).
-
-    Returns:
-        A list of k selected items.
-    """
-    if len(scores) != len(choices):
-        raise ValueError("Length of scores and choices must be the same.")
-    if k > len(choices):
-        raise ValueError("k cannot be greater than the number of choices.")
-    if exploitation_intensity < 0:
-        raise ValueError("exploitation_intensity cannot be negative.")
-
-    # Sort choices based on scores in descending order
-    sorted_indices = np.argsort(scores)[::-1]
-    sorted_choices = [choices[i] for i in sorted_indices]
-
-    # Assign ranks (1-based)
-    ranks = np.arange(1, len(sorted_choices) + 1)
-
-    # Calculate probabilities based on the provided formula
-    if exploitation_intensity == 0:
-        probabilities = np.ones_like(ranks, dtype=float)  # Uniform sampling
-    else:
-        probabilities = ranks ** (-exploitation_intensity)
-    probabilities /= np.sum(probabilities)
-
-    # Select k items based on rank probabilities
-    selected_indices = np.random.choice(
-        len(sorted_choices), size=k, p=probabilities, replace=False
-    )
-    selected_items = [sorted_choices[i] for i in selected_indices]
-
-    return selected_items
+    result = scipy.special.softmax(logits / temperature, axis=-1)
+    # Ensure that probabilities sum to 1 to prevent error in `np.random.choice`.
+    index = np.argmax(result)
+    result[index] = 1 - np.sum(result[0:index]) - np.sum(result[index + 1 :])
+    return result
 
 
 def _compute_avg_sim_for_island(
@@ -106,7 +73,7 @@ def _compute_avg_sim_for_island(
             sim = 0.0
 
         similarities.append(sim)
-        sim_cache[island_algo.id] = sim
+        sim_cache[island_algo.algo_id] = sim
 
     return float(np.mean(similarities)), sim_cache, total_timings
 
@@ -118,10 +85,10 @@ def _get_algo_sim(
     sim_cache2 = algo2["sim_cache"]
     sim_cache1 = algo1["sim_cache"]
 
-    if algo1.id in sim_cache2:
-        sim = sim_cache2[algo1.id]
-    elif algo2.id in sim_cache1:
-        sim = sim_cache1[algo2.id]
+    if algo1.algo_id in sim_cache2:
+        sim = sim_cache2[algo1.algo_id]
+    elif algo2.algo_id in sim_cache1:
+        sim = sim_cache1[algo2.algo_id]
     else:
         # If similarity cannot be found, then calculate
         try:
@@ -136,54 +103,63 @@ def _get_algo_sim(
             # Assign the similarity to zero when encountering exception
             sim = 0.0
         # Save to sim cache
-        algo1["sim_cache"][algo2.id] = sim
-        algo2["sim_cache"][algo1.id] = sim
+        algo1["sim_cache"][algo2.algo_id] = sim
+        algo2["sim_cache"][algo1.algo_id] = sim
 
     return sim
-
-
-@dataclasses.dataclass
-class AlgoDatabaseConfig:
-    algo_sim_calculator: BehaveSimCalculator = BehaveSimCalculator()
-
-    # --- Island specifications ---
-    n_islands: int = 10
-    island_capacity: Optional[int] = 80  # None means an endless large island
-
-    # --- Selection parameters ---
-    selection_exploitation_intensity: float = 0.9
-
-    # --- Algo registration acceleration parameters ---
-    num_sim_caculator_workers: int = 4
-    async_register: bool = True
 
 
 class AlgoDatabase:
     def __init__(
         self,
-        algo_database_config: AlgoDatabaseConfig = AlgoDatabaseConfig(),
+        sim_calculator: Optional[BehaveSimCalculator] = None,
+        num_islands: int = 10,
+        max_island_capacity: Optional[int] = None,
+        cluster_sampling_temperature_init: float = 0.1,
+        cluster_sampling_temperature_period: int = 30_000,
+        num_sim_caculator_workers: int = 1,
+        async_register: bool = False,
         islands: List["AlgoIsland"] = None,
     ):
         """Initializes the AlgoDatabase.
 
         Args:
-            algo_database_config: Configuration for the algorithm database.
+            sim_calculator: Similarity calculator used to compare algorithms.
+            num_islands: Number of islands in the algorithm database.
+            max_island_capacity: Optional per-island capacity limit.
+            cluster_sampling_temperature_init: Initial sampling temperature.
+            cluster_sampling_temperature_period: Temperature annealing period.
+            num_sim_caculator_workers: Number of worker processes for similarity computation.
+            async_register: Whether to register algorithms asynchronously.
             islands: An optional list of pre-initialized AlgoIsland instances.
-                     If None, `n_islands` new AlgoIsland instances are created
-                     based on `algo_database_config`.
+                     If None, `num_islands` new AlgoIsland instances are created.
         """
-        self.algo_database_config = algo_database_config
+        if sim_calculator is None:
+            sim_calculator = BehaveSimCalculator()
+
+        self._sim_calculator = sim_calculator
+        self._num_islands = num_islands
+        self._max_island_capacity = max_island_capacity
+        self._cluster_sampling_temperature_init = (
+            cluster_sampling_temperature_init
+        )
+        self._cluster_sampling_temperature_period = (
+            cluster_sampling_temperature_period
+        )
+        self._num_sim_caculator_workers = num_sim_caculator_workers
+        self._async_register = async_register
 
         if islands is not None:
             self.islands: List[AlgoIsland] = islands
         else:
             self.islands: List[AlgoIsland] = [
                 AlgoIsland(
-                    sim_calculator=algo_database_config.algo_sim_calculator,
-                    island_capacity=algo_database_config.island_capacity,
-                    exploitation_intensity=algo_database_config.selection_exploitation_intensity,
+                    sim_calculator=self._sim_calculator,
+                    island_capacity=self._max_island_capacity,
+                    cluster_sampling_temperature_init=self._cluster_sampling_temperature_init,
+                    cluster_sampling_temperature_period=self._cluster_sampling_temperature_period,
                 )
-                for _ in range(algo_database_config.n_islands)
+                for _ in range(self._num_islands)
             ]
         self._lock = threading.RLock()
         self._last_reset_time = time.time()
@@ -193,7 +169,7 @@ class AlgoDatabase:
 
         # Executor for CPU-bound similarity calculations (running in background processes)
         self._process_executor = ProcessPoolExecutor(
-            max_workers=self.algo_database_config.num_sim_caculator_workers
+            max_workers=self._num_sim_caculator_workers
         )
 
     def register_algo(self, algo: AlgoProto):
@@ -208,13 +184,13 @@ class AlgoDatabase:
             algo: The algorithm prototype to register.
         """
         future = self._executor.submit(self._register_algo_worker, algo)
-        if not self.algo_database_config.async_register:
+        if not self._async_register:
             future.result()
 
     def cluster_and_reassign_islands(self):
         """Clusters all algorithms and reassigns them to islands."""
         with self._lock:
-            n_islands = self.algo_database_config.n_islands
+            n_islands = self._num_islands
             # 1. Get all algorithms from all islands
             all_algos = [
                 algo for island in self.islands for algo in island.get_all_algorithms()
@@ -237,7 +213,7 @@ class AlgoDatabase:
                         sim = _get_algo_sim(
                             all_algos[i],
                             all_algos[j],
-                            self.algo_database_config.algo_sim_calculator,
+                            self._sim_calculator,
                         )
                     sim_matrix[i, j] = sim
                     sim_matrix[j, i] = sim
@@ -256,9 +232,10 @@ class AlgoDatabase:
             # Create new empty islands
             new_islands = [
                 AlgoIsland(
-                    sim_calculator=self.algo_database_config.algo_sim_calculator,
-                    island_capacity=self.algo_database_config.island_capacity,
-                    exploitation_intensity=self.algo_database_config.selection_exploitation_intensity,
+                    sim_calculator=self._sim_calculator,
+                    island_capacity=self._max_island_capacity,
+                    cluster_sampling_temperature_init=self._cluster_sampling_temperature_init,
+                    cluster_sampling_temperature_period=self._cluster_sampling_temperature_period,
                 )
                 for _ in range(n_islands)
             ]
@@ -306,7 +283,7 @@ class AlgoDatabase:
                     _compute_avg_sim_for_island,
                     algo,
                     island.algorithms,
-                    self.algo_database_config.algo_sim_calculator,
+                    self._sim_calculator,
                 )
             )
 
@@ -315,7 +292,9 @@ class AlgoDatabase:
 
         # Save similarity results in the "sim_cache"
         sim_cache_all_island = [res[1] for res in island_results]
-        sim_caches_all_island = functools.reduce(dict.__or__, sim_cache_all_island, {})  # noqa
+        sim_caches_all_island = functools.reduce(
+            dict.__or__, sim_cache_all_island, {}
+        )  # noqa
         algo["sim_cache"] = sim_caches_all_island
 
         # Aggregate timings across all islands
@@ -354,7 +333,7 @@ class AlgoDatabase:
     def restart_database(self):
         """Resets the weaker half of islands every 3600 seconds."""
         # If a max capacity is set, we skip database restart
-        if self.algo_database_config.island_capacity is not None:
+        if self._max_island_capacity is not None:
             return
 
         with self._lock:
@@ -387,9 +366,10 @@ class AlgoDatabase:
             for island_id in reset_islands_ids:
                 # Reset the island
                 self.islands[island_id] = AlgoIsland(
-                    sim_calculator=self.algo_database_config.algo_sim_calculator,
-                    island_capacity=self.algo_database_config.island_capacity,
-                    exploitation_intensity=self.algo_database_config.selection_exploitation_intensity,
+                    sim_calculator=self._sim_calculator,
+                    island_capacity=self._max_island_capacity,
+                    cluster_sampling_temperature_init=self._cluster_sampling_temperature_init,
+                    cluster_sampling_temperature_period=self._cluster_sampling_temperature_period,
                 )
 
                 # Copy a founder from a surviving island
@@ -462,15 +442,36 @@ class AlgoDatabase:
     def from_dict(
         cls,
         data: dict[str, Any],
-        config: AlgoDatabaseConfig,
+        sim_calculator: BehaveSimCalculator,
+        num_islands: int = 10,
+        max_island_capacity: Optional[int] = None,
+        cluster_sampling_temperature_init: float = 0.1,
+        cluster_sampling_temperature_period: int = 30_000,
+        num_sim_caculator_workers: int = 1,
+        async_register: bool = False,
     ) -> "AlgoDatabase":
         """Creates an AlgoDatabase from a dictionary."""
         islands = [
-            AlgoIsland.from_dict(island_data, config)
+            AlgoIsland.from_dict(
+                island_data,
+                sim_calculator=sim_calculator,
+                max_island_capacity=max_island_capacity,
+                cluster_sampling_temperature_init=cluster_sampling_temperature_init,
+                cluster_sampling_temperature_period=cluster_sampling_temperature_period,
+            )
             for island_data in data.get("islands", [])
         ]
 
-        return cls(config, islands=islands)
+        return cls(
+            sim_calculator=sim_calculator,
+            num_islands=num_islands,
+            max_island_capacity=max_island_capacity,
+            cluster_sampling_temperature_init=cluster_sampling_temperature_init,
+            cluster_sampling_temperature_period=cluster_sampling_temperature_period,
+            num_sim_caculator_workers=num_sim_caculator_workers,
+            async_register=async_register,
+            islands=islands,
+        )
 
 
 class AlgoIsland:
@@ -478,13 +479,15 @@ class AlgoIsland:
         self,
         sim_calculator: BehaveSimCalculator,
         island_capacity: Optional[int],
-        exploitation_intensity: float,
+        cluster_sampling_temperature_init: float,
+        cluster_sampling_temperature_period: int,
     ):
         self.sim_calculator = sim_calculator
         self.island_capacity = island_capacity
         self.algorithms: List[AlgoProto] = []
         self.all_algos: List[AlgoProto] = []  # Store all algorithms ever registered
-        self.exploitation_intensity = exploitation_intensity
+        self.cluster_sampling_temperature_init = cluster_sampling_temperature_init
+        self.cluster_sampling_temperature_period = cluster_sampling_temperature_period
         self._lock = threading.RLock()
 
     def __len__(self) -> int:
@@ -550,9 +553,9 @@ class AlgoIsland:
     def selection(self, k: int = 1) -> List[AlgoProto]:
         """Selects k algorithms from the island using a two-stage process.
 
-        First, a rank-based selection is performed on the unique scores available
+        First, a softmax-based selection is performed on the unique scores available
         in the island to choose `k` score tiers. Second, for each chosen score,
-        a second rank-based selection is performed on the algorithms in that
+        a second softmax-based selection is performed on the algorithms in that
         tier, where shorter programs are given a higher probability.
 
         This method is thread-safe.
@@ -573,25 +576,36 @@ class AlgoIsland:
             for algo in self.algorithms:
                 algos_by_score[algo.score].append(algo)
 
-            # 2. Prepare for rank-based selection on the scores
-            unique_scores = sorted(list(algos_by_score.keys()), reverse=True)
-            if not unique_scores:
+            unique_scores = np.array(list(algos_by_score.keys()))
+            if len(unique_scores) == 0:
                 return []
 
-            # Ensure k is not greater than the number of unique scores
-            num_to_select = min(k, len(unique_scores))
+            # 2. Convert scores to probabilities using softmax with temperature schedule
+            # Normalized the score
+            max_abs_score = float(np.abs(unique_scores).max())
+            cluster_scores = unique_scores.astype(float)
+            if max_abs_score > 1:
+                cluster_scores = cluster_scores / max_abs_score
 
-            # 3. Perform rank-based selection to pick k score tiers
-            selected_scores = _rank_based_selection(
-                scores=unique_scores,
-                choices=unique_scores,
-                k=num_to_select,
-                exploitation_intensity=self.exploitation_intensity,
+            period = self.cluster_sampling_temperature_period
+            temperature = self.cluster_sampling_temperature_init * (
+                1 - (len(self.all_algos) % period) / period
             )
+            probabilities = _softmax(cluster_scores, temperature)
 
-            # 4. For each selected score, perform a second rank-based selection
+            # At the beginning of an experiment when we have few clusters,
+            # place fewer programs into the prompt
+            num_to_select = min(len(unique_scores), k)
+
+            idx = np.random.choice(
+                len(unique_scores), size=num_to_select, p=probabilities, replace=False
+            )
+            selected_scores = unique_scores[idx]
+
+            # 3. For each selected score, perform a second softmax-based selection
             #    based on code length.
             selected_algos = []
+            scores = []
             for score in selected_scores:
                 candidate_algos = algos_by_score[score]
                 if not candidate_algos:
@@ -600,20 +614,23 @@ class AlgoIsland:
                 if len(candidate_algos) == 1:
                     selected_algos.append(candidate_algos[0])
                 else:
-                    # Higher score for shorter programs (-line_count)
-                    line_count_scores = [
-                        -len(str(algo.program).split("\n")) for algo in candidate_algos
-                    ]
-                    # Perform rank-based selection on length
-                    picked_algo = _rank_based_selection(
-                        scores=line_count_scores,
-                        choices=candidate_algos,
-                        k=1,
-                        exploitation_intensity=0.5,
-                    )[0]
-                    selected_algos.append(picked_algo)
+                    # Higher probability for shorter programs
+                    lengths = np.array(
+                        [len(str(algo.program)) for algo in candidate_algos]
+                    )
+                    normalized_lengths = (lengths - min(lengths)) / (
+                        max(lengths) + 1e-6
+                    )
 
-            return selected_algos
+                    # _softmax with negative normalized lengths to favor shorter programs
+                    probs = _softmax(-normalized_lengths, temperature=1.0)
+                    picked_algo = np.random.choice(candidate_algos, p=probs)
+                    selected_algos.append(picked_algo)
+                scores.append(score)
+
+            # Sort selected algorithms by score as in FunSearch
+            sorted_indices = np.argsort(scores)
+            return [selected_algos[i] for i in sorted_indices]
 
     def register_algo(self, algo: AlgoProto):
         """Registers a new algorithm in the island.
@@ -650,13 +667,17 @@ class AlgoIsland:
     def from_dict(
         cls,
         data: dict[str, Any],
-        algo_database_config: AlgoDatabaseConfig,
+        sim_calculator: BehaveSimCalculator,
+        max_island_capacity: Optional[int],
+        cluster_sampling_temperature_init: float,
+        cluster_sampling_temperature_period: int,
     ) -> "AlgoIsland":
         """Creates an AlgoIsland from a dictionary."""
         island = cls(
-            sim_calculator=algo_database_config.algo_sim_calculator,
-            island_capacity=algo_database_config.island_capacity,
-            exploitation_intensity=algo_database_config.selection_exploitation_intensity,
+            sim_calculator=sim_calculator,
+            island_capacity=max_island_capacity,
+            cluster_sampling_temperature_init=cluster_sampling_temperature_init,
+            cluster_sampling_temperature_period=cluster_sampling_temperature_period,
         )
         island.algorithms = [
             AlgoProto.from_dict(algo_data) for algo_data in data["algorithms"]

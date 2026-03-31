@@ -1,7 +1,10 @@
+# Copyright (c) 2026 Rui Zhang
+# Licensed under the MIT license.
+
 import time
 from typing import Any, List
 
-from behavesim_search.algo_proto import AlgoProto
+from algodisco.base.algo import AlgoProto
 import numpy as np
 
 
@@ -25,7 +28,8 @@ class BehaveSimCalculator:
         algo1: AlgoProto,
         algo2: AlgoProto,
     ) -> tuple[float, dict[str, float]]:
-        """Calculates the total weighted similarity between two AlgoProto instances.
+        """
+        Calculates the total weighted similarity between two AlgoProto instances.
 
         Args:
             algo1: The first AlgoProto instance.
@@ -56,8 +60,8 @@ class BehaveSimCalculator:
         """
         sim_on_all_instances = []
         algo1_all_instances_behave, algo2_all_instances_behave = (
-            algo1.behavior,
-            algo2.behavior,
+            algo1["behavior"],
+            algo2["behavior"],
         )
         algo1_all_instances_behave: List[List[Any]]
         algo2_all_instances_behave: List[List[Any]]
@@ -102,9 +106,9 @@ class BehaveSimCalculator:
                 cost = self.pairwise_distance_with_norm(pstraj1[i - 1], pstraj2[j - 1])
                 last_min = np.min(
                     [
-                        dtw_matrix[i - 1, j],  # insertion
-                        dtw_matrix[i, j - 1],  # deletion
-                        dtw_matrix[i - 1, j - 1],  # match
+                        dtw_matrix[i - 1, j],  # Insertion
+                        dtw_matrix[i, j - 1],  # Deletion
+                        dtw_matrix[i - 1, j - 1],  # Match
                     ]
                 )
                 dtw_matrix[i, j] = cost + last_min

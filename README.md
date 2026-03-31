@@ -22,7 +22,7 @@ git clone https://github.com/RayZhhh/behavesim.git
 cd behavesim
 ```
 
-> **Important:** This project requires Python >=3.10 (3.11 is recommended).
+> **Important:** This project requires Python >=3.11 (3.12 is recommended).
 
 There are two ways to set up the environment:
 
@@ -58,3 +58,4 @@ nohup uv run run_search.py > log.out 2>&1 &
 nohup python run_search.py > log.out 2>&1 &
 ```
 
+For detailed framework implementation notes, see https://github.com/RayZhhh/algodisco

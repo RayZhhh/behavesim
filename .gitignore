@@ -29,4 +29,5 @@ logs/
 swanlog/
 
 # Test files
-run_search_my_test.py
+run_search_debug.py
+**/_ignore

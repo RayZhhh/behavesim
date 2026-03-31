@@ -1,0 +1,54 @@
+method:
+  template_program_path: "path/to/template.py"
+  task_description_path: "path/to/task_description.txt"
+  language: "python"
+  num_samplers: auto
+  num_evaluators: auto
+  examples_per_prompt: 2
+  samples_per_prompt: 4
+  max_samples: 1000
+  inter_island_selection_p: 0.5
+  llm_max_tokens: 1024
+  llm_timeout_seconds: 120
+  db_save_frequency: 100
+  enable_database_reclustering: True
+  recluster_threshold: 100
+  db_algo_sim_calculator:
+    class_path: "algodisco.methods.funsearch_behavesim.similarity_calculator.BehaveSimCalculator"
+    kwargs:
+      use_dtw: true
+      allow_inequal_len: true
+      traj_sample_k: null
+      traj_trunc_n: null
+  db_num_islands: 10
+  db_max_island_capacity: 100
+  db_cluster_sampling_temperature_init: 0.1
+  db_cluster_sampling_temperature_period: 30000
+  db_num_sim_caculator_workers: 4
+  db_async_register: true
+  keep_metadata_keys: ["sample_time", "eval_time", "execution_time", "error_msg", "prompt", "response_text"]
+  debug_mode: false
+  debug_mode_crash: false
+
+llm:
+  class_path: "algodisco.providers.llm.openai_api.OpenAIAPI"
+  kwargs:
+    model: "gpt-3.5-turbo"
+    api_key: "your-api-key"
+    base_url: "https://api.openai.com/v1"
+
+emb_llm:
+  class_path: "algodisco.providers.llm.openai_api.OpenAIAPI"
+  kwargs:
+    model: "text-embedding-3-small"
+    api_key: "your-api-key"
+    base_url: "https://api.openai.com/v1"
+
+evaluator:
+  class_path: "path/to/evaluator.py:YourEvaluator"
+  kwargs: {}
+
+logger:
+  class_path: "algodisco.providers.logger.pickle_logger.BasePickleLogger"
+  kwargs:
+    logdir: "logs/behavesim_log"

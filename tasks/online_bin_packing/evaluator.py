@@ -1,11 +1,12 @@
 from typing import Any, Callable, Dict, List
 import numpy as np
 
-from behavesim_search.evaluator import BehaveSimSearchEvaluator, EvalResult
+from algodisco.methods.funsearch_behavesim.evaluator import FunSearchBehaveSimEvaluator
+from algodisco.toolkit.sandbox import sandbox_run
 from tasks.online_bin_packing.generate_weibull_instances import generate_weibull_dataset
 
 
-class Evaluator(BehaveSimSearchEvaluator):
+class Evaluator(FunSearchBehaveSimEvaluator):
     """Evaluator for online bin packing problem."""
 
     def __init__(self, n_instances=5, n_items=5000, capacity=100, **kwargs):
@@ -26,21 +27,17 @@ class Evaluator(BehaveSimSearchEvaluator):
             self.n_instances, self.n_items, self.capacity
         )
 
-    def evaluate_program(
-        self,
-        program_str: str,
-        callable_functions_dict: Dict[str, Callable] | None,
-        callable_functions_list: List[Callable] | None,
-        callable_classes_dict: Dict[str, Callable] | None,
-        callable_classes_list: List[Callable] | None,
-        **kwargs,
-    ) -> EvalResult:
-        if not callable_functions_dict or "priority" not in callable_functions_dict:
-            return EvalResult(score=-np.inf, behavior=[])
+    @sandbox_run(timeout=60)
+    def evaluate_program(self, program_str: str):
+        g = {}
+        exec(program_str, g)
 
-        priority_func = callable_functions_dict["priority"]
+        if not g or "priority" not in g:
+            return dict(score=-np.inf, behavior=[])
+
+        priority_func = g["priority"]
         score, behavior = self.evaluate_heuristic(priority_func)
-        return EvalResult(score=score, behavior=behavior)
+        return dict(score=score, behavior=behavior)
 
     def get_valid_bin_indices(self, item: float, bins: np.ndarray) -> np.ndarray:
         """Returns indices of bins in which item can fit."""
@@ -52,7 +49,7 @@ class Evaluator(BehaveSimSearchEvaluator):
         """Performs online binpacking of `items` into `bins`."""
         # Track which items are added to each bin.
         packing = [[] for _ in bins]
-        
+
         behavior_sequence = []
         decision_sequence = []
 
@@ -123,5 +120,5 @@ def priority(item: float, valid_bins: np.ndarray) -> np.ndarray:
 """
 
     obp = Evaluator()
-    results = obp.evaluate(priority_program)
-    print(f"Evaluation result: {results['result']}")
+    results = obp.evaluate_program(priority_program)
+    print(f"Evaluation result: {results.get('score')}")

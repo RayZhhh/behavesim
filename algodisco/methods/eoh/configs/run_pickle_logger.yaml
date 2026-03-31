@@ -1,0 +1,35 @@
+method:
+  template_program_path: "path/to/template.py"
+  task_description_path: "path/to/task_description.txt"
+  language: "python"
+  pop_size: 10
+  selection_num: 2
+  use_e2_operator: true
+  use_m1_operator: true
+  use_m2_operator: true
+  num_samplers: auto
+  num_evaluators: auto
+  max_samples: 1000
+  llm_max_tokens: 1024
+  llm_timeout_seconds: 120
+  db_save_frequency: 100
+  init_samples_ratio: 2.0
+  keep_metadata_keys: ["idea", "sample_time", "eval_time", "execution_time", "error_msg", "prompt", "response_text"]
+  debug_mode: false
+  debug_mode_crash: false
+
+llm:
+  class_path: "algodisco.providers.llm.openai_api.OpenAIAPI"
+  kwargs:
+    model: "gpt-3.5-turbo"
+    api_key: "your-api-key"
+    base_url: "https://api.openai.com/v1"
+
+evaluator:
+  class_path: "path/to/evaluator.py:YourEvaluator"
+  kwargs: {}
+
+logger:
+  class_path: "algodisco.providers.logger.pickle_logger.BasePickleLogger"
+  kwargs:
+    logdir: "logs/eoh_log"
